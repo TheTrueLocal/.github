@@ -2,12 +2,12 @@
 
 ## Architecture Overview
 
-**Multi-tenant microservices platform** connecting vendors with customers. Core services communicate via HTTP REST APIs, with shared PostgreSQL database and Redis for caching/queues.
+**Multi-tenant microservices platform** connecting partners with customers. Core services communicate via HTTP REST APIs, with shared PostgreSQL database and Redis for caching/queues.
 
 ### Service Boundaries
-- **thetruelocal-backend** (Port 3000) - Core API: auth, vendors, products, orders, rewards
+- **thetruelocal-backend** (Port 3000) - Core API: auth, partners, products, orders, rewards
 - **thetruelocal-web** (Port 3001) - Customer Next.js 15 app (App Router)
-- **thetruelocal-dealer-portal** (Port 3002) - Vendor Next.js management portal
+- **thetruelocal-partner-portal** (Port 3002) - Partner Next.js management portal
 - **thetruelocal-admin** (Port 3003) - Admin Next.js dashboard
 - **Specialized Services** - payments (3004), search (3005), notifications (3006), rewards (3007)
 
@@ -16,27 +16,27 @@
 ### Layer Architecture (Route → Controller → Service)
 ```typescript
 // Routes define endpoints with Swagger docs
-router.post('/profile', authenticateVendor, vendorController.updateProfile.bind(vendorController));
+router.post('/profile', authenticatePartner, partnerController.updateProfile.bind(partnerController));
 
 // Controllers handle HTTP concerns only
 async updateProfile(req: Request, res: Response, next: NextFunction) {
-  const result = await vendorService.updateProfile(req.user!.vendorId, req.body);
+  const result = await partnerService.updateProfile(req.user!.partnerId, req.body);
   res.json(success(result, 'Profile updated'));
 }
 
 // Services contain ALL business logic
-export class VendorService {
-  async updateProfile(vendorId: string, data: UpdateVendorDto) {
+export class PartnerService {
+  async updateProfile(partnerId: string, data: UpdatePartnerDto) {
     // Validation, database operations, webhooks
   }
 }
 ```
 
-**Critical**: Always bind controller methods when registering routes: `.bind(vendorController)`
+**Critical**: Always bind controller methods when registering routes: `.bind(partnerController)`
 
 ### Authentication Patterns
 - **Customer/Admin**: JWT via `authenticate` middleware → `req.user` (userId, email, role)
-- **Vendors**: JWT via `authenticateVendor` → `req.vendor` (vendorId, email)
+- **Partners**: JWT via `authenticatePartner` → `req.partner` (partnerId, email)
 - **Partner APIs**: API key via `authenticateApiKey` → `req.store` (storeId, scopes)
 
 Check `src/middleware/auth.ts` for all auth strategies.
@@ -111,7 +111,7 @@ const data = await apiRequest<Product[]>('/api/products');
 3. Store token in Zustand + cookies
 4. Middleware (`middleware.ts`) protects routes by verifying JWT
 
-**Vendor Portal**: Same flow but uses `authenticateVendor` backend middleware.
+**Partner Portal**: Same flow but uses `authenticatePartner` backend middleware.
 
 ## Docker Development Workflow
 
@@ -183,10 +183,10 @@ import { Button } from '@/components/ui/button';
 3. **Controller** → Parses request, calls `orderService.create()`
 4. **Service** → 
    - Validates inventory via `productsService`
-   - Creates Order + OrderItems + VendorOrders in transaction
+   - Creates Order + OrderItems + PartnerOrders in transaction
    - Queues webhook: `webhookQueue.triggerEvent('ORDER_CREATED')`
    - Calls rewards API: POST `http://rewards:3007/api/rewards/earn`
-5. **Background Worker** → Sends webhook to vendor URLs
+5. **Background Worker** → Sends webhook to partner URLs
 6. **Response** → Returns order via `ResponseBuilder.created()`
 
 ## Environment Variables (Critical)
@@ -206,7 +206,7 @@ Frontend apps need `NEXT_PUBLIC_API_URL=http://localhost:3000`
 
 1. **Prisma Changes**: Always run `npx prisma generate` after schema edits before `migrate dev`
 2. **Controller Methods**: Must `.bind()` when registering or `this` breaks
-3. **Vendor vs Customer**: Different auth middleware, don't mix in same route
+3. **Partner vs Customer**: Different auth middleware, don't mix in same route
 4. **API Keys**: Hashed in DB—use `hashApiKey()` from `utils/helpers` for lookups
 5. **Redis Connection**: Two clients required—`redis` (caching) vs `bullRedis` (queues) due to BullMQ needs
 
